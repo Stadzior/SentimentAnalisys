@@ -34,18 +34,16 @@ let main argv =
     let posts = Posts.Parse(File.ReadAllText(postsFilePath)).Posts 
                                                                |> Array.take(postsLimit)
     let comments = Comments.Parse(File.ReadAllText(commentsFilePath)).Comments
-
-    let questions = posts
-                        |> Array.map(fun x -> (Array.append [|x.Body.Value|] (comments 
-                                                                                |> Array.filter(fun y -> y.PostId = x.Id) 
-                                                                                |> Array.map(fun y -> y.Text))) |> String.concat " ")
     
-    for question in questions do
+    for post in posts do
+        let question = Array.append [|post.Body.Value|] (comments                                                            
+                                                            |> Array.filter(fun x -> x.PostId = post.Id) 
+                                                            |> Array.map(fun x -> x.Text)) |> String.concat " "   
         let result = Http.RequestString
                         ( "https://api.aylien.com/api/v1/sentiment", httpMethod = "POST",
                         body = FormValues [ "text", question; "mode", "document"; "language", "en" ],
                         headers = [ "Accept", "application/json"; "x-aylien-textapi-application-key", secrets |> Seq.last; "x-aylien-textapi-application-id", secrets |> Seq.head])
         let sentiment = Sentiment.Parse(result)
-        Console.Write("")
+        Console.WriteLine("Post id={0}, has {1} polarity with {2} confidence, and {3} subjectivity with {4} confidence." , post.Id, sentiment.Polarity, sentiment.PolarityConfidence, sentiment.Subjectivity, sentiment.SubjectivityConfidence)
     Console.ReadKey();
     0
