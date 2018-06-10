@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FSharpDataDumpSentimentAnalisys": {
+      "commandName": "Project",
+      "commandLineArgs": "5"
+    }
+  }
+}

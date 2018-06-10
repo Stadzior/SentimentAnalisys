@@ -6,25 +6,46 @@ open FSharp.Data
 
 [<Literal>]
 let apiKeyFilePath = __SOURCE_DIRECTORY__ + "\\secret.txt"
-let dataDumpFilePath = __SOURCE_DIRECTORY__ + "\\Comments.xml"
+[<Literal>]
+let commentsFilePath = __SOURCE_DIRECTORY__ + "\\Comments.xml"
+[<Literal>]
+let postsFilePath = __SOURCE_DIRECTORY__ + "\\Posts.xml"
+[<Literal>]
+let sampleSentiment = """{
+    "polarity": "neutral",
+    "subjectivity": "unknown",
+    "text": "blah blah blah",
+    "polarity_confidence": 0.123,
+    "subjectivity_confidence": 0
+}"""
 
-type Comments = XmlProvider<"""<comments><row Id="1" PostId="1" Score="0" Text="Foo." CreationDate="2010-07-28T19:36:59.773" UserId="1" /><row Id="1" PostId="1" Score="0" Text="Foo." CreationDate="2010-07-28T19:36:59.773" UserId="1" /></comments>""">
+type Comments = XmlProvider<commentsFilePath>
+type Posts = XmlProvider<postsFilePath>
+type Sentiment = JsonProvider<sampleSentiment>
 
 [<EntryPoint>]
 let main argv =
-    let apiKey =
+    let secrets = seq {
                 use sr = new StreamReader(apiKeyFilePath)
-                sr.ReadToEnd()
-    let rawData =
-                use sr = new StreamReader(dataDumpFilePath)
-                sr.ReadToEnd()
+                while not sr.EndOfStream do
+                    yield sr.ReadLine()
+            }  
+    let postsLimit = int(argv.[0])
+    let posts = Posts.Parse(File.ReadAllText(postsFilePath)).Posts 
+                                                               |> Array.take(postsLimit)
+    let comments = Comments.Parse(File.ReadAllText(commentsFilePath)).Comments
 
-    let comments = Comments.Parse(rawData)
-    let result = Http.RequestString
-                    ( "https://api.tap.aylien.com/v1/models/718dbdc0-98fa-4ace-b814-a555859c094d", httpMethod = "GET",
-                    query   = [ "x-aylien-tap-application-key", apiKey; "text", "batman" ],
-                    headers = [ "Accept", "application/json" ])
+    let questions = posts
+                        |> Array.map(fun x -> (Array.append [|x.Body.Value|] (comments 
+                                                                                |> Array.filter(fun y -> y.PostId = x.Id) 
+                                                                                |> Array.map(fun y -> y.Text))) |> String.concat " ")
     
-    Console.Write(result)
+    for question in questions do
+        let result = Http.RequestString
+                        ( "https://api.aylien.com/api/v1/sentiment", httpMethod = "POST",
+                        body = FormValues [ "text", question; "mode", "document"; "language", "en" ],
+                        headers = [ "Accept", "application/json"; "x-aylien-textapi-application-key", secrets |> Seq.last; "x-aylien-textapi-application-id", secrets |> Seq.head])
+        let sentiment = Sentiment.Parse(result)
+        Console.Write("")
     Console.ReadKey();
-    0 // return an integer exit code
+    0
